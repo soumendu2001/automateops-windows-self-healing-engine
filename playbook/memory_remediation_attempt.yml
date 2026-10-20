@@ -22,7 +22,9 @@
       "sqlservr",
       "explorer",
       "WindowsTerminal",
-      "StartMenuExperienceHost"
+      "StartMenuExperienceHost",
+      "powershell",
+      "pwsh"
     )
     
     $ProcessThresholdMB = {{ process_memory_threshold_mb }}
