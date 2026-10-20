@@ -20,7 +20,7 @@
     - name: Check service status
       ansible.windows.win_shell: |
         (Get-Service -Name "{{ item.name }}").Status
-      loop: "{{ services }}"
+      loop: "{{ services | default([])}}"
       when:
         - item.validation_type == "service"
       register: service_checks
