@@ -38,7 +38,7 @@
     # ATTEMPT 1
     ############################################################
 
-    - include_tasks: remediation_attempt.yml
+    - include_tasks: cpu_remediation_attempt.yml
       vars:
         attempt_no: 1
       when: not remediation_complete | default(false)
@@ -47,7 +47,7 @@
     # ATTEMPT 2
     ############################################################
 
-    - include_tasks: remediation_attempt.yml
+    - include_tasks: cpu_remediation_attempt.yml
       vars:
         attempt_no: 2
       when: not remediation_complete | default(false)
@@ -56,7 +56,7 @@
     # ATTEMPT 3
     ############################################################
 
-    - include_tasks: remediation_attempt.yml
+    - include_tasks: cpu_remediation_attempt.yml
       vars:
         attempt_no: 3
       when: not remediation_complete | default(false)
@@ -65,7 +65,7 @@
     # ATTEMPT 4
     ############################################################
 
-    - include_tasks: remediation_attempt.yml
+    - include_tasks: cpu_remediation_attempt.yml
       vars:
         attempt_no: 4
       when: not remediation_complete | default(false)
@@ -74,7 +74,7 @@
     # ATTEMPT 5
     ############################################################
 
-    - include_tasks: remediation_attempt.yml
+    - include_tasks: cpu_remediation_attempt.yml
       vars:
         attempt_no: 5
       when: not remediation_complete | default(false)
