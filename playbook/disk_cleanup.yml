@@ -31,7 +31,7 @@
     - name: Exit if disk healthy
       meta: end_play
       when:
-        - current_disk_usage < (desired_disk_usage | int)
+        - (current_disk_usage | int) < (desired_disk_usage | int)
 
     ############################################################
     # REMEDIATION
