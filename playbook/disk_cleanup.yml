@@ -1,0 +1,31 @@
+############################################################
+# PRE-CHECK
+############################################################
+
+- name: Get current disk usage
+  win_shell: |
+    $disk = Get-CimInstance Win32_LogicalDisk `
+    -Filter "DeviceID='{{ drive_letter | default("C") }}:'"
+
+    :Round(
+      (($disk.Size - $disk.FreeSpace) / $disk.Size) * 100,
+      0
+    )
+  register: disk_usage
+
+- name: Set disk utilization fact
+  set_fact:
+    current_disk_usage: "{{ disk_usage.stdout | trim | int }}"
+
+- name: Display current disk utilization
+  debug:
+    msg: "Current Disk Usage: {{ current_disk_usage }}%"
+
+- name: Exit if disk healthy
+  meta: end_play
+  when:
+    - current_disk_usage < (desired_disk_usage | int)
+
+- name: Remediation required
+  debug:
+    msg: "Disk threshold exceeded. Starting cleanup."
