@@ -1,0 +1,30 @@
+############################################################
+# PRE-CHECK
+############################################################
+
+- name: Get current CPU utilization
+  win_shell: |
+    $cpu = Get-Counter '\Processor(_Total)\% Processor Time'
+
+    :Round(
+      $cpu.CounterSamples.CookedValue,
+      0
+    )
+  register: cpu_usage
+
+- name: Set CPU fact
+  set_fact:
+    current_cpu_usage: "{{ cpu_usage.stdout | trim | int }}"
+
+- name: Display current CPU utilization
+  debug:
+    msg: "Current CPU Usage: {{ current_cpu_usage }}%"
+
+- name: Exit if CPU healthy
+  meta: end_play
+  when:
+    - current_cpu_usage < (desired_cpu_usage | int)
+
+- name: Remediation required
+  debug:
+    msg: "CPU threshold exceeded. Starting remediation."
