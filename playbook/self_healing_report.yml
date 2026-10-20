@@ -1,0 +1,36 @@
+---
+- name: Generate Self-Healing Report
+  hosts: localhost
+  gather_facts: false
+
+  tasks:
+
+    - name: Build Report
+      debug:
+        msg:
+          - ""
+          - "==============================================="
+          - " WINDOWS AUTONOMOUS SELF-HEALING REPORT "
+          - "==============================================="
+          - "Server: {{ target_host }}"
+          - ""
+          - "ISSUES DETECTED"
+          - ""
+          - "Service Remediation Required : {{ run_service_fix }}"
+          - "Disk Remediation Required    : {{ run_disk_fix }}"
+          - "Memory Remediation Required  : {{ run_memory_fix }}"
+          - "CPU Remediation Required     : {{ run_cpu_fix }}"
+          - ""
+          - "FINAL STATE"
+          - ""
+          - "Service Healthy : {{ service_healthy }}"
+          - "Disk Usage      : {{ disk_usage_after }}%"
+          - "Memory Usage    : {{ memory_usage_after }}%"
+          - "CPU Usage       : {{ cpu_usage_after }}%"
+          - ""
+          - "AUTOMATION RESULT"
+          - ""
+          - "Human Intervention : 0"
+          - "Self-Healing Status: {{ 'SUCCESS' if self_healing_success else 'FAILED' }}"
+          - ""
+          - "==============================================="
