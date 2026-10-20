@@ -1,0 +1,116 @@
+---
+- name: Windows Post Validation
+  hosts: "{{ target_host }}"
+  gather_facts: false
+
+  vars:
+    disk_threshold: "{{ desired_disk_usage | default(90) }}"
+    memory_threshold: "{{ desired_memory_usage | default(90) }}"
+    cpu_threshold: "{{ desired_cpu_usage | default(85) }}"
+
+  tasks:
+
+    #################################################
+    # Service Validation
+    #################################################
+
+    - name: Check Spooler Service
+      win_service:
+        name: Spooler
+      register: spooler
+
+    - name: Check W32Time Service
+      win_service:
+        name: W32Time
+      register: w32time
+
+    - name: Service Validation Result
+      set_fact:
+        service_healthy: >-
+          {{
+            spooler.state == "started"
+            and
+            w32time.state == "started"
+          }}
+
+    #################################################
+    # Disk Validation
+    #################################################
+
+    - name: Get Current Disk Usage
+      win_shell: |
+        $disk = Get-CimInstance Win32_LogicalDisk `
+        -Filter "DeviceID='{{ drive_letter | default("C") }}:'"
+
+        [math]::Round(
+          (($disk.Size - $disk.FreeSpace) / $disk.Size) * 100,
+          0
+        )
+      register: disk_after
+
+    - set_fact:
+        disk_usage_after: "{{ disk_after.stdout | trim | int }}"
+        disk_healthy: "{{ (disk_after.stdout | trim | int) < (disk_threshold | int) }}"
+
+    #################################################
+    # Memory Validation
+    #################################################
+
+    - name: Get Current Memory Usage
+      win_shell: |
+        $os = Get-CimInstance Win32_OperatingSystem
+
+        $used =
+        (($os.TotalVisibleMemorySize -
+          $os.FreePhysicalMemory) /
+          $os.TotalVisibleMemorySize) * 100
+
+        [math]::Round($used,0)
+      register: memory_after
+
+    - set_fact:
+        memory_usage_after: "{{ memory_after.stdout | trim | int }}"
+        memory_healthy: "{{ (memory_after.stdout | trim | int) < (memory_threshold | int) }}"
+
+    #################################################
+    # CPU Validation
+    #################################################
+
+    - name: Get Current CPU Usage
+      win_shell: |
+        $cpu = Get-Counter '\Processor(_Total)\% Processor Time'
+
+        [math]::Round(
+          $cpu.CounterSamples.CookedValue,
+          0
+        )
+      register: cpu_after
+
+    - set_fact:
+        cpu_usage_after: "{{ cpu_after.stdout | trim | int }}"
+        cpu_healthy: "{{ (cpu_after.stdout | trim | int) < (cpu_threshold | int) }}"
+
+    #################################################
+    # Overall Result
+    #################################################
+
+    - name: Set Overall Health Status
+      set_fact:
+        self_healing_success: >-
+          {{
+            service_healthy
+            and disk_healthy
+            and memory_healthy
+            and cpu_healthy
+          }}
+
+    - name: Validation Summary
+      debug:
+        msg:
+          - "========== POST VALIDATION =========="
+          - "Service Healthy : {{ service_healthy }}"
+          - "Disk Usage      : {{ disk_usage_after }}%"
+          - "Memory Usage    : {{ memory_usage_after }}%"
+          - "CPU Usage       : {{ cpu_usage_after }}%"
+          - "Overall Status  : {{ self_healing_success }}"
+          - "====================================="
