@@ -1,0 +1,32 @@
+############################################################
+# PRE-CHECK
+############################################################
+
+- name: Get current memory utilization
+  win_shell: |
+    $os = Get-CimInstance Win32_OperatingSystem
+
+    $used =
+    (($os.TotalVisibleMemorySize -
+      $os.FreePhysicalMemory) /
+      $os.TotalVisibleMemorySize) * 100
+
+    :Round($used,0)
+  register: memory_usage
+
+- name: Set memory fact
+  set_fact:
+    current_memory_usage: "{{ memory_usage.stdout | trim | int }}"
+
+- name: Show memory utilization
+  debug:
+    msg: "Current Memory Usage: {{ current_memory_usage }}%"
+
+- name: Exit if memory healthy
+  meta: end_play
+  when:
+    - current_memory_usage < (desired_memory_usage | int)
+
+- name: Remediation required
+  debug:
+    msg: "Memory threshold exceeded. Starting remediation."
