@@ -19,33 +19,44 @@
         run_service_fix: false
         failed_services: []
 
-    - name: Validate configured services
-      win_service:
+    - name: Gather service information
+      ansible.windows.win_service_info:
         name: "{{ item.name }}"
       loop: "{{ services | default([]) }}"
+      when:
+        - item.validation_type == "service"
       register: service_results
       ignore_errors: true
 
+    - name: Display service status
+      debug:
+        msg: "{{ item.item.name }} : {{ item.services[0].state }}"
+      loop: "{{ service_results.results }}"
+      when:
+        - item.services is defined
+        - item.services | length > 0
+
     - name: Build failed services list
       set_fact:
-        failed_services: "{{ failed_services + [item.item.name] }}"
-      when:
-        - item.state is defined
-        - item.state != "started"
+        failed_services: "{{ failed_services + [ item.item.name ] }}"
       loop: "{{ service_results.results }}"
+      when:
+        - item.services is defined
+        - item.services | length > 0
+        - item.services[0].state != "started"
 
     - name: Set service remediation flag
       set_fact:
-        run_service_fix: "{{ failed_services | length > 0 }}"
+        run_service_fix: "{{ (failed_services | length) > 0 }}"
 
     #####################################################
     # Disk Utilization Check
     #####################################################
 
     - name: Get disk utilization
-      win_shell: |
+      ansible.windows.win_shell: |
         $disk = Get-CimInstance Win32_LogicalDisk `
-        -Filter "DeviceID='{{ drive_letter | default("C") }}:'"
+        -Filter "DeviceID='{{ drive_letter | default('C') }}:'"
 
         [math]::Round(
           (($disk.Size - $disk.FreeSpace) / $disk.Size) * 100,
@@ -66,7 +77,7 @@
     #####################################################
 
     - name: Get memory utilization
-      win_shell: |
+      ansible.windows.win_shell: |
         $os = Get-CimInstance Win32_OperatingSystem
 
         $used =
@@ -90,11 +101,9 @@
     #####################################################
 
     - name: Get CPU utilization
-      win_shell: |
-        $cpu = Get-Counter '\Processor(_Total)\% Processor Time'
-
+      ansible.windows.win_shell: |
         [math]::Round(
-          $cpu.CounterSamples.CookedValue,
+          (Get-Counter '\Processor(_Total)\% Processor Time').CounterSamples.CookedValue,
           0
         )
       register: cpu_usage_raw
@@ -119,7 +128,7 @@
           - "CPU Usage           : {{ cpu_usage }}%"
           - "Memory Usage        : {{ memory_usage }}%"
           - "Disk Usage          : {{ disk_usage }}%"
-          - "Failed Services     : {{ failed_services | default([]) }}"
+          - "Failed Services     : {{ failed_services }}"
           - "------------------------------------------"
           - "CPU Remediation     : {{ run_cpu_fix }}"
           - "Memory Remediation  : {{ run_memory_fix }}"
