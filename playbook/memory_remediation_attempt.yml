@@ -1,0 +1,127 @@
+---
+- name: Display Attempt Number
+  debug:
+    msg: "Remediation Attempt {{ attempt_no }}"
+
+- name: Update Attempt Counter
+  set_fact:
+    remediation_attempt_count: "{{ attempt_no }}"
+
+- name: Get Highest Non-Protected Memory Process
+  ansible.windows.win_shell: |
+    $protected = @(
+      "System",
+      "Idle",
+      "svchost",
+      "lsass",
+      "csrss",
+      "services",
+      "wininit",
+      "winlogon",
+      "MsMpEng",
+      "sqlservr",
+      "explorer",
+      "WindowsTerminal",
+      "StartMenuExperienceHost"
+    )
+    
+    $ProcessThresholdMB = {{ process_memory_threshold_mb }}
+
+    $proc = Get-Process |  
+      Sort-Object WS -Descending |
+      Where-Object {
+          $_.Name -notin $protected -and
+          ($_.WS / 1MB) -gt $ProcessThresholdMB
+      } |
+      Select-Object -First 1 
+
+    if ($proc) {
+      $proc.Name
+    }
+    else {
+      "NONE"
+    }
+  register: candidate_process
+
+- name: Display Candidate Process
+  debug:
+    msg: "Candidate Process: {{ candidate_process.stdout | trim }}"
+
+- name: Stop Candidate Process
+  ansible.windows.win_shell: |
+    $protected = @(
+      "System",
+      "Idle",
+      "svchost",
+      "lsass",
+      "csrss",
+      "services",
+      "wininit",
+      "winlogon",
+      "MsMpEng",
+      "sqlservr",
+      "explorer",
+      "WindowsTerminal",
+      "StartMenuExperienceHost"
+    )
+    $ProcessThresholdMB = {{ process_memory_threshold_mb }}
+    $proc = Get-Process |
+      Sort-Object WS -Descending |
+      Where-Object { $_.Name -notin $protected -and ($_.WS / 1MB) -gt $ProcessThresholdMB} |
+      Select-Object -First 1
+
+    if ($proc) {
+      Stop-Process -Id $proc.Id -Force
+      Write-Output $proc.Name
+    }
+  register: remediation_result
+
+  when:
+    - candidate_process.stdout | trim != "NONE"
+
+- name: Display Remediation Result
+  debug:
+    msg: "Stopped Process: {{ remediation_result.stdout | trim }}"
+
+  when:
+    - candidate_process.stdout | trim != "NONE"
+
+- name: Wait For Memory Stabilization
+  pause:
+    seconds: 10
+
+- name: Recheck Memory Usage
+  ansible.windows.win_shell: |
+    $os = Get-CimInstance Win32_OperatingSystem
+
+    $total = $os.TotalVisibleMemorySize
+    $free  = $os.FreePhysicalMemory
+
+    $used = $total - $free
+
+    [math]::Round(($used / $total) * 100,2)
+  register: memory_check
+
+- name: Display Current Memory
+  debug:
+    msg: "Current Memory Usage: {{ memory_check.stdout | trim }} %"
+
+- name: Update Runtime Memory
+  set_fact:
+    current_memory: "{{ memory_check.stdout | float }}"
+
+- name: Threshold Reached
+  set_fact:
+    remediation_complete: true
+
+  when:
+    - current_memory | float <= memory_threshold
+
+- name: Remediation Success
+  debug:
+    msg: >
+      Memory dropped below threshold ({{ memory_threshold }}%).
+      Remediation completed successfully.
+
+  when:
+    - remediation_complete
