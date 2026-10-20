@@ -1,31 +1,130 @@
-############################################################
-# PRE-CHECK
-############################################################
+---
+- name: Windows Disk Cleanup
+  hosts: "{{ target_host }}"
+  gather_facts: false
 
-- name: Get current disk usage
-  win_shell: |
-    $disk = Get-CimInstance Win32_LogicalDisk `
-    -Filter "DeviceID='{{ drive_letter | default("C") }}:'"
+  tasks:
 
-    :Round(
-      (($disk.Size - $disk.FreeSpace) / $disk.Size) * 100,
-      0
-    )
-  register: disk_usage
+    ############################################################
+    # PRE-CHECK
+    ############################################################
 
-- name: Set disk utilization fact
-  set_fact:
-    current_disk_usage: "{{ disk_usage.stdout | trim | int }}"
+    - name: Get current disk usage
+      ansible.windows.win_shell: |
+        $disk = Get-CimInstance Win32_LogicalDisk `
+        -Filter "DeviceID='{{ drive_letter | default("C") }}:'"
 
-- name: Display current disk utilization
-  debug:
-    msg: "Current Disk Usage: {{ current_disk_usage }}%"
+        [math]::Round(
+          (($disk.Size - $disk.FreeSpace) / $disk.Size) * 100,
+          0
+        )
+      register: disk_usage
 
-- name: Exit if disk healthy
-  meta: end_play
-  when:
-    - current_disk_usage < (desired_disk_usage | int)
+    - name: Set disk utilization fact
+      set_fact:
+        current_disk_usage: "{{ disk_usage.stdout | trim | int }}"
 
-- name: Remediation required
-  debug:
-    msg: "Disk threshold exceeded. Starting cleanup."
+    - name: Display current disk utilization
+      debug:
+        msg: "Current Disk Usage: {{ current_disk_usage }}%"
+
+    - name: Exit if disk healthy
+      meta: end_play
+      when:
+        - current_disk_usage < (desired_disk_usage | int)
+
+    ############################################################
+    # REMEDIATION
+    ############################################################
+
+    - name: Remediation required
+      debug:
+        msg:
+          - "Disk threshold exceeded."
+          - "Starting cleanup."
+
+    - name: Get free space before cleanup
+      ansible.windows.win_shell: |
+        $disk = Get-CimInstance Win32_LogicalDisk `
+        -Filter "DeviceID='{{ drive_letter | default("C") }}:'"
+
+        [math]::Round(($disk.FreeSpace / 1GB),2)
+      register: free_before
+
+    - name: Delete Windows Temp Files
+      ansible.windows.win_shell: |
+        Remove-Item -Path "C:\Windows\Temp\*" `
+          -Recurse -Force -ErrorAction SilentlyContinue
+
+    - name: Delete User Temp Files
+      ansible.windows.win_shell: |
+        Get-ChildItem "C:\Users" -Directory |
+        ForEach-Object {
+          $temp = "$($_.FullName)\AppData\Local\Temp"
+
+          if(Test-Path $temp) {
+            Remove-Item "$temp\*" `
+              -Recurse -Force `
+              -ErrorAction SilentlyContinue
+          }
+        }
+
+    - name: Clear Recycle Bin
+      ansible.windows.win_shell: |
+        Clear-RecycleBin -Force -ErrorAction SilentlyContinue
+
+    - name: Clear Windows Update Cache
+      ansible.windows.win_shell: |
+        Stop-Service wuauserv -Force
+
+        Remove-Item `
+          "C:\Windows\SoftwareDistribution\Download\*" `
+          -Recurse -Force `
+          -ErrorAction SilentlyContinue
+
+        Start-Service wuauserv
+
+    - name: Clear IIS Logs
+      ansible.windows.win_shell: |
+        if (Test-Path "C:\inetpub\logs\LogFiles") {
+          Get-ChildItem `
+            "C:\inetpub\logs\LogFiles" `
+            -Recurse |
+            Remove-Item -Force `
+            -ErrorAction SilentlyContinue
+        }
+
+    ############################################################
+    # VALIDATION
+    ############################################################
+
+    - name: Wait for stabilization
+      pause:
+        seconds: 10
+
+    - name: Get disk usage after cleanup
+      ansible.windows.win_shell: |
+        $disk = Get-CimInstance Win32_LogicalDisk `
+        -Filter "DeviceID='{{ drive_letter | default("C") }}:'"
+
+        [math]::Round(
+          (($disk.Size - $disk.FreeSpace) / $disk.Size) * 100,
+          0
+        )
+      register: disk_after
+
+    - name: Get free space after cleanup
+      ansible.windows.win_shell: |
+        $disk = Get-CimInstance Win32_LogicalDisk `
+        -Filter "DeviceID='{{ drive_letter | default("C") }}:'"
+
+        [math]::Round(($disk.FreeSpace / 1GB),2)
+      register: free_after
+
+    - name: Display cleanup results
+      debug:
+        msg:
+          - "Disk Usage Before : {{ current_disk_usage }}%"
+          - "Disk Usage After  : {{ disk_after.stdout | trim }}%"
+          - "Free Space Before : {{ free_before.stdout | trim }} GB"
+          - "Free Space After  : {{ free_after.stdout | trim }} GB"
