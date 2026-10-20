@@ -83,7 +83,7 @@
 
     - name: Set memory remediation flag
       set_fact:
-        run_memory_fix: "{{ memory_usage >= memory_threshold | int }}"
+        run_memory_fix: "{{ (memory_usage | int) >= (memory_threshold | int) }}"
 
     #####################################################
     # CPU Utilization Check
@@ -105,7 +105,7 @@
 
     - name: Set CPU remediation flag
       set_fact:
-        run_cpu_fix: "{{ cpu_usage >= cpu_threshold | int }}"
+        run_cpu_fix: "{{ (cpu_usage | int) >= (cpu_threshold | int) }}"
 
     #####################################################
     # Health Summary
