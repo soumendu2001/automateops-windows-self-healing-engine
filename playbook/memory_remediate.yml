@@ -10,7 +10,7 @@
     attempt_no: 1
   when:
     - not remediation_complete
-    - current_memory | float > memory_threshold
+    - (current_memory | float) > (memory_threshold | float)
 
 - name: Remediation Attempt 2
   include_tasks: memory_remediation_attempt.yml
@@ -18,7 +18,7 @@
     attempt_no: 2
   when:
     - not remediation_complete
-    - current_memory | float > memory_threshold
+    - (current_memory | float) > (memory_threshold | float)
 
 - name: Remediation Attempt 3
   include_tasks: memory_remediation_attempt.yml
@@ -26,7 +26,7 @@
     attempt_no: 3
   when:
     - not remediation_complete
-    - current_memory | float > memory_threshold
+    - (current_memory | float) > (memory_threshold | float)
 
 - name: Remediation Attempt 4
   include_tasks: memory_remediation_attempt.yml
@@ -34,7 +34,7 @@
     attempt_no: 4
   when:
     - not remediation_complete
-    - current_memory | float > memory_threshold
+    - (current_memory | float) > (memory_threshold | float)
 
 - name: Remediation Attempt 5
   include_tasks: memory_remediation_attempt.yml
@@ -42,7 +42,7 @@
     attempt_no: 5
   when:
     - not remediation_complete
-    - current_memory | float > memory_threshold
+    - (current_memory | float) > (memory_threshold | float)
 
 - name: Remediation Attempt 6
   include_tasks: memory_remediation_attempt.yml
@@ -50,7 +50,7 @@
     attempt_no: 6
   when:
     - not remediation_complete
-    - current_memory | float > memory_threshold
+    - (current_memory | float) > (memory_threshold | float)
 
 - name: Remediation Attempt 7
   include_tasks: memory_remediation_attempt.yml
