@@ -4,7 +4,7 @@
   gather_facts: false
 
   vars:
-    memory_threshold: "{{ desired_memory_usage | default(90) }}"
+    memory_threshold: "{{ desired_memory_usage | default(50) }}"
     process_memory_threshold_mb: 100
 
   tasks:
