@@ -9,47 +9,39 @@
     cpu_threshold: "{{ desired_cpu_usage | default(85) }}"
 
   tasks:
-
     #####################################################
     # Service Validation
     #####################################################
 
-    - name: Initialize service remediation flag
+    - name: Initialize failed services
       set_fact:
-        run_service_fix: false
         failed_services: []
 
-    - name: Gather service information
-      ansible.windows.win_service_info:
-        name: "{{ item.name }}"
-      loop: "{{ services | default([]) }}"
+    - name: Check service status
+      ansible.windows.win_shell: |
+        (Get-Service -Name "{{ item.name }}").Status
+      loop: "{{ services }}"
       when:
         - item.validation_type == "service"
-      register: service_results
-      ignore_errors: true
+      register: service_checks
 
-    - name: Display service status
+    - name: Show service status
       debug:
-        msg: "{{ item.item.name }} : {{ item.services[0].state }}"
-      loop: "{{ service_results.results }}"
-      when:
-        - item.services is defined
-        - item.services | length > 0
+        msg: "{{ item.item.name }} : {{ item.stdout }}"
+      loop: "{{ service_checks.results }}"
 
     - name: Build failed services list
       set_fact:
         failed_services: "{{ failed_services + [ item.item.name ] }}"
-      loop: "{{ service_results.results }}"
       when:
-        - item.services is defined
-        - item.services | length > 0
-        - item.services[0].state != "started"
+        - item.stdout | trim != "Running"
+      loop: "{{ service_checks.results }}"
 
     - name: Set service remediation flag
       set_fact:
-        run_service_fix: "{{ (failed_services | length) > 0 }}"
+        run_service_fix: "{{ failed_services | length > 0 }}"
 
-    #####################################################
+    # #####################################################
     # Disk Utilization Check
     #####################################################
 
