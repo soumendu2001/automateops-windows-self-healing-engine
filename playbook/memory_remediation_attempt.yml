@@ -117,7 +117,7 @@
     remediation_complete: true
 
   when:
-    - current_memory | float <= memory_threshold
+    - (current_memory | float) <= (memory_threshold | float)
 
 - name: Remediation Success
   debug:
