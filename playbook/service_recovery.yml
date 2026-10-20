@@ -1,31 +1,71 @@
-############################################################
-# PRE-CHECK
-############################################################
+---
+- name: Windows Service Recovery
+  hosts: "{{ target_host }}"
+  gather_facts: false
 
-- name: Initialize failed services list
-  set_fact:
-    failed_services: []
+  tasks:
 
-- name: Check configured services
-  win_service:
-    name: "{{ item.name }}"
-  loop: "{{ services }}"
-  register: service_status
+    ############################################################
+    # PRE-CHECK
+    ############################################################
 
-- name: Identify failed services
-  set_fact:
-    failed_services: "{{ failed_services + [ item.item.name ] }}"
-  when:
-    - item.state is defined
-    - item.state != "started"
-  loop: "{{ service_status.results }}"
+    - name: Initialize failed services list
+      set_fact:
+        failed_services: []
 
-- name: Exit if all services healthy
-  meta: end_play
-  when: failed_services | length == 0
+    - name: Check service status
+      ansible.windows.win_shell: |
+        (Get-Service -Name "{{ item.name }}").Status
+      loop: "{{ services | default([]) }}"
+      when:
+        - item.validation_type == "service"
+      register: service_checks
 
-- name: Service remediation required
-  debug:
-    msg:
-      - "Failed Services: {{ failed_services }}"
-      - "Initiating recovery..."
+    - name: Display service status
+      debug:
+        msg: "{{ item.item.name }} : {{ item.stdout | trim }}"
+      loop: "{{ service_checks.results }}"
+
+    - name: Build failed services list
+      set_fact:
+        failed_services: "{{ failed_services + [ item.item.name ] }}"
+      loop: "{{ service_checks.results }}"
+      when:
+        - item.stdout is defined
+        - item.stdout | trim != "Running"
+
+    - name: Exit if all services healthy
+      meta: end_play
+      when: failed_services | length == 0
+
+    ############################################################
+    # REMEDIATION
+    ############################################################
+
+    - name: Display failed services
+      debug:
+        msg:
+          - "Failed Services: {{ failed_services }}"
+          - "Initiating recovery..."
+
+    - name: Start failed services
+      ansible.windows.win_service:
+        name: "{{ item }}"
+        state: started
+      loop: "{{ failed_services }}"
+      register: recovery_results
+
+    ############################################################
+    # VALIDATION
+    ############################################################
+
+    - name: Recheck service status
+      ansible.windows.win_shell: |
+        (Get-Service -Name "{{ item }}").Status
+      loop: "{{ failed_services }}"
+      register: validation_results
+
+    - name: Display recovery results
+      debug:
+        msg: "{{ item.item }} : {{ item.stdout | trim }}"
+      loop: "{{ validation_results.results }}"
