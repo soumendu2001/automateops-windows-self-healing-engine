@@ -32,7 +32,7 @@
     - name: Exit if CPU healthy
       meta: end_play
       when:
-        - current_cpu <= (cpu_threshold | float)
+        - (current_cpu | float) <= (cpu_threshold | float)
 
     ############################################################
     # ATTEMPT 1
