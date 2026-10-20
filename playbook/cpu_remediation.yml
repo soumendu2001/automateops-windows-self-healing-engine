@@ -1,30 +1,90 @@
-############################################################
-# PRE-CHECK
-############################################################
+---
+- name: Windows CPU Remediation
+  hosts: "{{ target_host }}"
+  gather_facts: false
 
-- name: Get current CPU utilization
-  win_shell: |
-    $cpu = Get-Counter '\Processor(_Total)\% Processor Time'
+  vars:
+    cpu_threshold: "{{ desired_cpu_usage | default(85) }}"
+    remediation_complete: false
 
-    :Round(
-      $cpu.CounterSamples.CookedValue,
-      0
-    )
-  register: cpu_usage
+  tasks:
 
-- name: Set CPU fact
-  set_fact:
-    current_cpu_usage: "{{ cpu_usage.stdout | trim | int }}"
+    ############################################################
+    # PRE-CHECK
+    ############################################################
 
-- name: Display current CPU utilization
-  debug:
-    msg: "Current CPU Usage: {{ current_cpu_usage }}%"
+    - name: Get current CPU utilization
+      ansible.windows.win_shell: |
+        [math]::Round(
+          (Get-Counter '\Processor(_Total)\% Processor Time').CounterSamples.CookedValue,
+          2
+        )
+      register: cpu_usage
 
-- name: Exit if CPU healthy
-  meta: end_play
-  when:
-    - current_cpu_usage < (desired_cpu_usage | int)
+    - name: Set CPU fact
+      set_fact:
+        current_cpu: "{{ cpu_usage.stdout | trim | float }}"
 
-- name: Remediation required
-  debug:
-    msg: "CPU threshold exceeded. Starting remediation."
+    - name: Display CPU
+      debug:
+        msg: "Current CPU Usage: {{ current_cpu }}%"
+
+    - name: Exit if CPU healthy
+      meta: end_play
+      when:
+        - current_cpu <= (cpu_threshold | float)
+
+    ############################################################
+    # ATTEMPT 1
+    ############################################################
+
+    - include_tasks: remediation_attempt.yml
+      vars:
+        attempt_no: 1
+      when: not remediation_complete | default(false)
+
+    ############################################################
+    # ATTEMPT 2
+    ############################################################
+
+    - include_tasks: remediation_attempt.yml
+      vars:
+        attempt_no: 2
+      when: not remediation_complete | default(false)
+
+    ############################################################
+    # ATTEMPT 3
+    ############################################################
+
+    - include_tasks: remediation_attempt.yml
+      vars:
+        attempt_no: 3
+      when: not remediation_complete | default(false)
+
+    ############################################################
+    # ATTEMPT 4
+    ############################################################
+
+    - include_tasks: remediation_attempt.yml
+      vars:
+        attempt_no: 4
+      when: not remediation_complete | default(false)
+
+    ############################################################
+    # ATTEMPT 5
+    ############################################################
+
+    - include_tasks: remediation_attempt.yml
+      vars:
+        attempt_no: 5
+      when: not remediation_complete | default(false)
+
+    ############################################################
+    # FINAL RESULT
+    ############################################################
+
+    - name: Final Result
+      debug:
+        msg:
+          - "CPU Remediation Complete: {{ remediation_complete | default(false) }}"
+          - "Final CPU Utilization: {{ current_cpu }}"
