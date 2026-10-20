@@ -33,7 +33,7 @@
 
     - meta: end_play
       when:
-        - current_memory <= memory_threshold | float
+        - (current_memory | float) <= (memory_threshold | float)
 
     #####################################################
     # MAIN REMEDIATION ENGINE
