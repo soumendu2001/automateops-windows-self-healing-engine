@@ -1,32 +1,42 @@
-############################################################
-# PRE-CHECK
-############################################################
+---
+- name: Windows Memory Remediation
+  hosts: "{{ target_host }}"
+  gather_facts: false
 
-- name: Get current memory utilization
-  win_shell: |
-    $os = Get-CimInstance Win32_OperatingSystem
+  vars:
+    memory_threshold: "{{ desired_memory_usage | default(90) }}"
+    process_memory_threshold_mb: 100
 
-    $used =
-    (($os.TotalVisibleMemorySize -
-      $os.FreePhysicalMemory) /
-      $os.TotalVisibleMemorySize) * 100
+  tasks:
 
-    :Round($used,0)
-  register: memory_usage
+    #####################################################
+    # PRE-CHECK
+    #####################################################
 
-- name: Set memory fact
-  set_fact:
-    current_memory_usage: "{{ memory_usage.stdout | trim | int }}"
+    - name: Get current memory utilization
+      ansible.windows.win_shell: |
+        $os = Get-CimInstance Win32_OperatingSystem
 
-- name: Show memory utilization
-  debug:
-    msg: "Current Memory Usage: {{ current_memory_usage }}%"
+        $used =
+        (($os.TotalVisibleMemorySize -
+          $os.FreePhysicalMemory) /
+          $os.TotalVisibleMemorySize) * 100
 
-- name: Exit if memory healthy
-  meta: end_play
-  when:
-    - current_memory_usage < (desired_memory_usage | int)
+        [math]::Round($used,0)
+      register: memory_before
 
-- name: Remediation required
-  debug:
-    msg: "Memory threshold exceeded. Starting remediation."
+    - set_fact:
+        current_memory: "{{ memory_before.stdout | trim | float }}"
+
+    - debug:
+        msg: "Current Memory Usage: {{ current_memory }}%"
+
+    - meta: end_play
+      when:
+        - current_memory <= memory_threshold | float
+
+    #####################################################
+    # MAIN REMEDIATION ENGINE
+    #####################################################
+
+    - include_tasks: memory_remediate.yml
