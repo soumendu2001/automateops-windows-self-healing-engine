@@ -1,0 +1,31 @@
+############################################################
+# PRE-CHECK
+############################################################
+
+- name: Initialize failed services list
+  set_fact:
+    failed_services: []
+
+- name: Check configured services
+  win_service:
+    name: "{{ item.name }}"
+  loop: "{{ services }}"
+  register: service_status
+
+- name: Identify failed services
+  set_fact:
+    failed_services: "{{ failed_services + [ item.item.name ] }}"
+  when:
+    - item.state is defined
+    - item.state != "started"
+  loop: "{{ service_status.results }}"
+
+- name: Exit if all services healthy
+  meta: end_play
+  when: failed_services | length == 0
+
+- name: Service remediation required
+  debug:
+    msg:
+      - "Failed Services: {{ failed_services }}"
+      - "Initiating recovery..."
