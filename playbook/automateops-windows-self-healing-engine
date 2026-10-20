@@ -1,0 +1,128 @@
+---
+- name: Windows Health Check
+  hosts: "{{ target_host }}"
+  gather_facts: false
+
+  vars:
+    disk_threshold: "{{ desired_disk_usage | default(90) }}"
+    memory_threshold: "{{ desired_memory_usage | default(90) }}"
+    cpu_threshold: "{{ desired_cpu_usage | default(85) }}"
+
+  tasks:
+
+    #####################################################
+    # Service Validation
+    #####################################################
+
+    - name: Initialize service remediation flag
+      set_fact:
+        run_service_fix: false
+        failed_services: []
+
+    - name: Validate configured services
+      win_service:
+        name: "{{ item.name }}"
+      loop: "{{ services | default([]) }}"
+      register: service_results
+      ignore_errors: true
+
+    - name: Build failed services list
+      set_fact:
+        failed_services: "{{ failed_services + [item.item.name] }}"
+      when:
+        - item.state is defined
+        - item.state != "started"
+      loop: "{{ service_results.results }}"
+
+    - name: Set service remediation flag
+      set_fact:
+        run_service_fix: "{{ failed_services | length > 0 }}"
+
+    #####################################################
+    # Disk Utilization Check
+    #####################################################
+
+    - name: Get disk utilization
+      win_shell: |
+        $disk = Get-CimInstance Win32_LogicalDisk `
+        -Filter "DeviceID='{{ drive_letter | default("C") }}:'"
+
+        [math]::Round(
+          (($disk.Size - $disk.FreeSpace) / $disk.Size) * 100,
+          0
+        )
+      register: disk_usage_raw
+
+    - name: Set disk usage fact
+      set_fact:
+        disk_usage: "{{ disk_usage_raw.stdout | trim | int }}"
+
+    - name: Set disk remediation flag
+      set_fact:
+        run_disk_fix: "{{ disk_usage >= disk_threshold | int }}"
+
+    #####################################################
+    # Memory Utilization Check
+    #####################################################
+
+    - name: Get memory utilization
+      win_shell: |
+        $os = Get-CimInstance Win32_OperatingSystem
+
+        $used =
+        (($os.TotalVisibleMemorySize -
+          $os.FreePhysicalMemory) /
+          $os.TotalVisibleMemorySize) * 100
+
+        [math]::Round($used,0)
+      register: memory_usage_raw
+
+    - name: Set memory usage fact
+      set_fact:
+        memory_usage: "{{ memory_usage_raw.stdout | trim | int }}"
+
+    - name: Set memory remediation flag
+      set_fact:
+        run_memory_fix: "{{ memory_usage >= memory_threshold | int }}"
+
+    #####################################################
+    # CPU Utilization Check
+    #####################################################
+
+    - name: Get CPU utilization
+      win_shell: |
+        $cpu = Get-Counter '\Processor(_Total)\% Processor Time'
+
+        [math]::Round(
+          $cpu.CounterSamples.CookedValue,
+          0
+        )
+      register: cpu_usage_raw
+
+    - name: Set CPU usage fact
+      set_fact:
+        cpu_usage: "{{ cpu_usage_raw.stdout | trim | int }}"
+
+    - name: Set CPU remediation flag
+      set_fact:
+        run_cpu_fix: "{{ cpu_usage >= cpu_threshold | int }}"
+
+    #####################################################
+    # Health Summary
+    #####################################################
+
+    - name: Display health assessment
+      debug:
+        msg:
+          - "========== WINDOWS HEALTH REPORT =========="
+          - "Server              : {{ inventory_hostname }}"
+          - "CPU Usage           : {{ cpu_usage }}%"
+          - "Memory Usage        : {{ memory_usage }}%"
+          - "Disk Usage          : {{ disk_usage }}%"
+          - "Failed Services     : {{ failed_services | default([]) }}"
+          - "------------------------------------------"
+          - "CPU Remediation     : {{ run_cpu_fix }}"
+          - "Memory Remediation  : {{ run_memory_fix }}"
+          - "Disk Remediation    : {{ run_disk_fix }}"
+          - "Service Remediation : {{ run_service_fix }}"
+          - "=========================================="
