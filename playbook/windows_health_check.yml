@@ -5,7 +5,7 @@
 
   vars:
     disk_threshold: "{{ desired_disk_usage | default(90) }}"
-    memory_threshold: "{{ desired_memory_usage | default(90) }}"
+    memory_threshold: "{{ desired_memory_usage | default(60) }}"
     cpu_threshold: "{{ desired_cpu_usage | default(85) }}"
 
   tasks:
