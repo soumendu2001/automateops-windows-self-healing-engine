@@ -58,4 +58,4 @@
     attempt_no: 7
   when:
     - not remediation_complete
-    - current_memory | float > memory_threshold
+    - (current_memory | float) > (memory_threshold |float)
