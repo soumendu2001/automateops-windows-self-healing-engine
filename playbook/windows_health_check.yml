@@ -59,7 +59,7 @@
 
     - name: Set disk remediation flag
       set_fact:
-        run_disk_fix: "{{ disk_usage >= disk_threshold | int }}"
+        run_disk_fix: "{{ (disk_usage | int) >= (disk_threshold | int) }}"
 
     #####################################################
     # Memory Utilization Check
