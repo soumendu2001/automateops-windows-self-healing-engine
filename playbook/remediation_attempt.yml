@@ -1,0 +1,108 @@
+---
+- name: Display Attempt Number
+  debug:
+    msg: "Remediation Attempt {{ attempt_no }}"
+- name: Update Attempt Counter
+  set_fact:
+    remediation_attempt_count: "{{ attempt_no }}"
+
+- name: Get Highest Non-Protected Process
+  ansible.windows.win_shell: |
+    $protected = @(
+      "System",
+      "Idle",
+      "svchost",
+      "lsass",
+      "csrss",
+      "services",
+      "wininit",
+      "winlogon",
+      "MsMpEng",
+      "sqlservr",
+      "explorer"
+    )
+
+    $proc = Get-Process |
+      Sort-Object CPU -Descending |
+      Where-Object { $_.Name -notin $protected } |
+      Select-Object -First 1
+
+    if ($proc) {
+      $proc.Name
+    } else {
+      "NONE"
+    }
+  register: candidate_process
+
+- name: Display Candidate Process
+  debug:
+    msg: "Candidate Process: {{ candidate_process.stdout | trim }}"
+
+- name: Stop Candidate Process
+  ansible.windows.win_shell: |
+    $protected = @(
+      "System",
+      "Idle",
+      "svchost",
+      "lsass",
+      "csrss",
+      "services",
+      "wininit",
+      "winlogon",
+      "MsMpEng",
+      "sqlservr",
+      "explorer"
+    )
+
+    $proc = Get-Process |
+      Sort-Object CPU -Descending |
+      Where-Object { $_.Name -notin $protected } |
+      Select-Object -First 1
+
+    if ($proc) {
+      Stop-Process -Id $proc.Id -Force
+      Write-Output $proc.Name
+    }
+  register: remediation_result
+  when:
+    - candidate_process.stdout | trim != "NONE"
+
+- name: Display Remediation Result
+  debug:
+    msg: "Stopped Process: {{ remediation_result.stdout | trim }}"
+  when:
+    - candidate_process.stdout | trim != "NONE"
+
+- name: Wait For CPU Stabilization
+  pause:
+    seconds: 5
+
+- name: Recheck CPU
+  ansible.windows.win_shell: |
+    [math]::Round(
+      (Get-Counter '\Processor(_Total)\% Processor Time').CounterSamples.CookedValue,
+      2
+    )
+  register: cpu_check
+
+- name: Display Current CPU
+  debug:
+    msg: "Current CPU: {{ cpu_check.stdout | trim}} %"
+
+- name: Update Runtime CPU
+  set_fact:
+    current_cpu: "{{ cpu_check.stdout | trim | float }}"
+
+- name: Threshold Reached
+  set_fact:
+    remediation_complete: true
+  when:
+    - current_cpu | float <= cpu_threshold | float
+
+- name: Remediation Success
+  debug:
+    msg: >
+      CPU dropped below threshold ({{ cpu_threshold | trim }}%).
+      Remediation completed successfully.
+  when:
+    - remediation_complete
