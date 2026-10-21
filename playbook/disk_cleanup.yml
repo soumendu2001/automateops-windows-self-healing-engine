@@ -36,4 +36,157 @@
       ansible.builtin.set_stats:
         aggregate: true
         data:
-          disk_usage_after: "{{ current_disk
+          disk_usage_after: "{{ current_disk_usage }}"
+          disk_cleanup_success: true
+      when:
+        - current_disk_usage | int < desired_disk_usage | int
+
+    - name: Exit if disk healthy
+      meta: end_play
+      when:
+        - current_disk_usage | int < desired_disk_usage | int
+
+    ############################################################
+    # REMEDIATION
+    ############################################################
+
+    - name: Remediation required
+      debug:
+        msg:
+          - "Disk threshold exceeded"
+          - "Starting cleanup"
+
+    - name: Get free space before cleanup
+      ansible.windows.win_shell: |
+        $disk = Get-CimInstance Win32_LogicalDisk `
+        -Filter "DeviceID='{{ drive_letter | default('C') }}:'"
+
+        [math]::Round(($disk.FreeSpace / 1GB),2)
+      register: free_before
+
+    ############################################################
+    # CLEAR CUSTOM DIRECTORIES
+    ############################################################
+
+    - name: Clear directories
+      ansible.windows.win_shell: |
+        if (Test-Path "{{ item }}") {
+          Remove-Item "{{ item }}\*" `
+            -Recurse `
+            -Force `
+            -ErrorAction SilentlyContinue
+        }
+      loop:
+        - C:\Temp
+        - C:\DiskFill
+        - C:\inetpub\logs
+      ignore_errors: true
+
+    ############################################################
+    # WINDOWS CLEANUP
+    ############################################################
+
+    - name: Delete Windows Temp Files
+      ansible.windows.win_shell: |
+        Remove-Item `
+          -Path "C:\Windows\Temp\*" `
+          -Recurse `
+          -Force `
+          -ErrorAction SilentlyContinue
+
+    - name: Delete User Temp Files
+      ansible.windows.win_shell: |
+        Get-ChildItem "C:\Users" -Directory |
+        ForEach-Object {
+          $temp = "$($_.FullName)\AppData\Local\Temp"
+
+          if (Test-Path $temp) {
+            Remove-Item "$temp\*" `
+              -Recurse `
+              -Force `
+              -ErrorAction SilentlyContinue
+          }
+        }
+
+    - name: Clear Recycle Bin
+      ansible.windows.win_shell: |
+        Clear-RecycleBin -Force -ErrorAction SilentlyContinue
+
+    - name: Clear Windows Update Cache
+      ansible.windows.win_shell: |
+        Stop-Service wuauserv -Force
+
+        Remove-Item `
+          "C:\Windows\SoftwareDistribution\Download\*" `
+          -Recurse `
+          -Force `
+          -ErrorAction SilentlyContinue
+
+        Start-Service wuauserv
+
+    - name: Clear IIS Logs
+      ansible.windows.win_shell: |
+        if (Test-Path "C:\inetpub\logs\LogFiles") {
+          Get-ChildItem `
+            "C:\inetpub\logs\LogFiles" `
+            -Recurse |
+            Remove-Item `
+              -Force `
+              -ErrorAction SilentlyContinue
+        }
+
+    ############################################################
+    # VALIDATION
+    ############################################################
+
+    - name: Wait for stabilization
+      pause:
+        seconds: 10
+
+    - name: Get disk usage after cleanup
+      ansible.windows.win_shell: |
+        $disk = Get-CimInstance Win32_LogicalDisk `
+        -Filter "DeviceID='{{ drive_letter | default('C') }}:'"
+
+        [math]::Round(
+          (($disk.Size - $disk.FreeSpace) / $disk.Size) * 100,
+          0
+        )
+      register: disk_after
+
+    - name: Get free space after cleanup
+      ansible.windows.win_shell: |
+        $disk = Get-CimInstance Win32_LogicalDisk `
+        -Filter "DeviceID='{{ drive_letter | default('C') }}:'"
+
+        [math]::Round(($disk.FreeSpace / 1GB),2)
+      register: free_after
+
+    - name: Set disk usage after fact
+      set_fact:
+        disk_usage_after: "{{ disk_after.stdout | trim | int }}"
+
+    - name: Determine disk remediation success
+      set_fact:
+        disk_cleanup_success: >-
+          {{ disk_usage_after | int < desired_disk_usage | int }}
+
+    - name: Display cleanup results
+      debug:
+        msg:
+          - "Disk Usage Before : {{ current_disk_usage }}%"
+          - "Disk Usage After  : {{ disk_usage_after }}%"
+          - "Free Space Before : {{ free_before.stdout | trim }} GB"
+          - "Free Space After  : {{ free_after.stdout | trim }} GB"
+          - "Cleanup Success   : {{ disk_cleanup_success }}"
+
+    ############################################################
+    # EXPORT TO WORKFLOW
+    ############################################################
+
+    - name: Export disk results
+      ansible.builtin.set_stats:
+        aggregate: true
+        data:
+          disk_usage_after: "{{ disk_usage_after }}"
+          disk_cleanup_success: "{{ disk_cleanup_success }}"
