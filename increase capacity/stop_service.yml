@@ -1,1 +1,29 @@
 
+---
+- name: Stop Windows Services for Self-Healing Demo
+  hosts: "{{ target_host }}"
+  gather_facts: false
+
+  tasks:
+
+    - name: Stop Windows Time Service
+      ansible.windows.win_service:
+        name: W32Time
+        state: stopped
+
+    - name: Stop Print Spooler Service
+      ansible.windows.win_service:
+        name: Spooler
+        state: stopped
+
+    - name: Stop IIS Service
+      ansible.windows.win_service:
+        name: W3SVC
+        state: stopped
+
+    - name: Display status
+      debug:
+        msg:
+          - "W32Time stopped"
+          - "Spooler stopped"
+          - "W3SVC stopped"
