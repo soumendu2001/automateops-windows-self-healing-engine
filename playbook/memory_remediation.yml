@@ -8,6 +8,10 @@
     process_memory_threshold_mb: 100
 
   tasks:
+    - name: Export memory results
+      set_stats:
+        data:
+           memory_usage_after: "{{ memory_usage_after }}"
 
     #####################################################
     # PRE-CHECK
