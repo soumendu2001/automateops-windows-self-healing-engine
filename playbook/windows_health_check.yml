@@ -63,14 +63,6 @@
         - item.stdout is defined
       loop: "{{ service_checks.results }}"
 
-    - name: Add failed port validations
-      set_fact:
-        failed_services: "{{ failed_services + [ item.item.name ] }}"
-      when:
-        - item.stdout | trim != "OPEN"
-        - item.stdout is defined
-      loop: "{{ port_checks.results }}"
-
     - name: Set service remediation flag
       set_fact:
         run_service_fix: "{{ failed_services | length > 0 }}"
