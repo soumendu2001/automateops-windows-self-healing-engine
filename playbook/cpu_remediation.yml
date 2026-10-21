@@ -3,92 +3,101 @@
   hosts: "{{ target_host }}"
   gather_facts: false
 
-  vars:
-    cpu_threshold: "{{ desired_cpu_usage | default(85) }}"
-    remediation_complete: false
-
   tasks:
-    - name: Export CPU results
-      set_stats:
-        data:
-          cpu_usage_after: "{{ cpu_usage_after }}"
 
     ############################################################
     # PRE-CHECK
     ############################################################
 
-    - name: Get current CPU utilization
+    - name: Get CPU utilization
       ansible.windows.win_shell: |
-        [math]::Round(
-          (Get-Counter '\Processor(_Total)\% Processor Time').CounterSamples.CookedValue,
-          2
-        )
-      register: cpu_usage
+        $sample1 = (
+          Get-Counter '\Processor(_Total)\% Processor Time'
+        ).CounterSamples.CookedValue
+
+        Start-Sleep -Seconds 2
+
+        $sample2 = (
+          Get-Counter '\Processor(_Total)\% Processor Time'
+        ).CounterSamples.CookedValue
+
+        [math]::Round(($sample1 + $sample2) / 2,0)
+      register: cpu_before
 
     - name: Set CPU fact
       set_fact:
-        current_cpu: "{{ cpu_usage.stdout | trim | float }}"
+        current_cpu_usage: "{{ cpu_before.stdout | trim | int }}"
 
-    - name: Display CPU
+    - name: Display CPU utilization
       debug:
-        msg: "Current CPU Usage: {{ current_cpu }}%"
+        msg: "Current CPU Usage: {{ current_cpu_usage }}%"
+
+    - name: Export healthy CPU status
+      set_stats:
+        aggregate: true
+        data:
+          cpu_usage_after: "{{ current_cpu_usage }}"
+      when:
+        - current_cpu_usage | int < desired_cpu_usage | int
 
     - name: Exit if CPU healthy
       meta: end_play
       when:
-        - (current_cpu | float) <= (cpu_threshold | float)
+        - current_cpu_usage | int < desired_cpu_usage | int
 
     ############################################################
-    # ATTEMPT 1
+    # REMEDIATION
     ############################################################
 
-    - include_tasks: cpu_remediation_attempt.yml
-      vars:
-        attempt_no: 1
-      when: not remediation_complete | default(false)
+    - name: Stop high CPU powershell processes
+      ansible.windows.win_shell: |
+        Get-Process powershell -ErrorAction SilentlyContinue |
+        Stop-Process -Force -ErrorAction SilentlyContinue
+
+    - name: Restart WMI service
+      ansible.windows.win_service:
+        name: Winmgmt
+        state: restarted
 
     ############################################################
-    # ATTEMPT 2
+    # VALIDATION
     ############################################################
 
-    - include_tasks: cpu_remediation_attempt.yml
-      vars:
-        attempt_no: 2
-      when: not remediation_complete | default(false)
+    - name: Wait for stabilization
+      pause:
+        seconds: 15
 
-    ############################################################
-    # ATTEMPT 3
-    ############################################################
+    - name: Recheck CPU utilization
+      ansible.windows.win_shell: |
+        $sample1 = (
+          Get-Counter '\Processor(_Total)\% Processor Time'
+        ).CounterSamples.CookedValue
 
-    - include_tasks: cpu_remediation_attempt.yml
-      vars:
-        attempt_no: 3
-      when: not remediation_complete | default(false)
+        Start-Sleep -Seconds 2
 
-    ############################################################
-    # ATTEMPT 4
-    ############################################################
+        $sample2 = (
+          Get-Counter '\Processor(_Total)\% Processor Time'
+        ).CounterSamples.CookedValue
 
-    - include_tasks: cpu_remediation_attempt.yml
-      vars:
-        attempt_no: 4
-      when: not remediation_complete | default(false)
+        [math]::Round(($sample1 + $sample2) / 2,0)
+      register: cpu_after
 
-    ############################################################
-    # ATTEMPT 5
-    ############################################################
+    - name: Set CPU usage after fact
+      set_fact:
+        cpu_usage_after: "{{ cpu_after.stdout | trim | int }}"
 
-    - include_tasks: cpu_remediation_attempt.yml
-      vars:
-        attempt_no: 5
-      when: not remediation_complete | default(false)
-
-    ############################################################
-    # FINAL RESULT
-    ############################################################
-
-    - name: Final Result
+    - name: Display CPU results
       debug:
         msg:
-          - "CPU Remediation Complete: {{ remediation_complete | default(false) }}"
-          - "Final CPU Utilization: {{ current_cpu }}"
+          - "CPU Before : {{ current_cpu_usage }}%"
+          - "CPU After  : {{ cpu_usage_after }}%"
+
+    ############################################################
+    # EXPORT RESULTS
+    ############################################################
+
+    - name: Export CPU results
+      set_stats:
+        aggregate: true
+        data:
+          cpu_usage_after: "{{ cpu_usage_after }}"
