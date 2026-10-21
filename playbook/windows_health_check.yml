@@ -52,6 +52,8 @@
       debug:
         msg: "{{ item.item.name }} : {{ item.stdout }}"
       loop: "{{ service_checks.results }}"
+      when: 
+        - item.stdout is defined
 
     - name: Build failed services list
       set_fact:
