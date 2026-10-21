@@ -8,6 +8,10 @@
     remediation_complete: false
 
   tasks:
+    - name: Export CPU results
+      set_stats:
+        data:
+          cpu_usage_after: "{{ cpu_usage_after }}"
 
     ############################################################
     # PRE-CHECK
