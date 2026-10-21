@@ -1,10 +1,20 @@
-
 ---
 - hosts: "{{ target_host }}"
   gather_facts: false
 
   tasks:
-     - name: Start CPU load
-       ansible.windows.win_shell: |
-         Start-Process powershell.exe `
-        -ArgumentList "-ExecutionPolicy Bypass -File increase_cpu.ps1"
+
+    - name: Create folder
+      ansible.windows.win_file:
+        path: C:\Lab
+        state: directory
+
+    - name: Copy script
+      ansible.windows.win_copy:
+        src: increase_cpu.ps1
+        dest: C:\Lab\increase_cpu.ps1
+
+    - name: Start CPU load
+      ansible.windows.win_shell: |
+        Start-Process powershell.exe `
+          -ArgumentList "-ExecutionPolicy Bypass -File C:\Lab\increase_cpu.ps1"
