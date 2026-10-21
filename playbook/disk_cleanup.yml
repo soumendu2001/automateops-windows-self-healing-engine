@@ -147,3 +147,18 @@
           - "Disk Usage After  : {{ disk_after.stdout | trim }}%"
           - "Free Space Before : {{ free_before.stdout | trim }} GB"
           - "Free Space After  : {{ free_after.stdout | trim }} GB"
+        - name: Set disk usage after fact
+      set_fact:
+        disk_usage_after: "{{ disk_after.stdout | trim | int }}"
+
+    - name: Determine disk remediation success
+      set_fact:
+        disk_cleanup_success: >-
+          {{ (disk_usage_after | int) < (desired_disk_usage | int) }}
+
+    - name: Export disk results
+      ansible.builtin.set_stats:
+        aggregate: true
+        data:
+          disk_usage_after: "{{ disk_usage_after }}"
+          disk_cleanup_success: "{{ disk_cleanup_success }}"
