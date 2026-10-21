@@ -60,6 +60,7 @@
         failed_services: "{{ failed_services + [ item.item.name ] }}"
       when:
         - item.stdout | trim != "Running"
+        - item.stdout is defined
       loop: "{{ service_checks.results }}"
 
     - name: Add failed port validations
