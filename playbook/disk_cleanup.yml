@@ -4,6 +4,10 @@
   gather_facts: false
 
   tasks:
+    - name: Export disk results
+      set_stats:
+        data:
+          disk_usage_after: "{{ disk_usage_after }}"
 
     ############################################################
     # PRE-CHECK
