@@ -65,6 +65,7 @@
         failed_services: "{{ failed_services + [ item.item.name ] }}"
       when:
         - item.stdout | trim != "OPEN"
+        - item.stdout is defined
       loop: "{{ port_checks.results }}"
 
     - name: Set service remediation flag
