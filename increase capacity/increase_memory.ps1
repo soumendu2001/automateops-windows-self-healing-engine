@@ -1,15 +1,24 @@
-$computer = Get-CimInstance Win32_ComputerSystem
-
-$totalGB = $computer.TotalPhysicalMemory / 1GB
 $targetPct = 90
-
-$targetBytes = $computer.TotalPhysicalMemory * ($targetPct / 100)
-
 $memory = New-Object System.Collections.ArrayList
 
-while ((Get-Process -Id $PID).WorkingSet64 -lt $targetBytes)
+while ($true)
 {
+    $os = Get-CimInstance Win32_OperatingSystem
+
+    $totalMB = [math]::Round($os.TotalVisibleMemorySize / 1024, 2)
+    $freeMB  = [math]::Round($os.FreePhysicalMemory / 1024, 2)
+
+    $usedPct = [math]::Round((($totalMB - $freeMB) / $totalMB) * 100, 2)
+
+    Write-Host "Current Memory Usage: $usedPct%"
+
+    if ($usedPct -ge $targetPct)
+    {
+        break
+    }
+
     $null = $memory.Add((New-Object byte[] 100MB))
+
     Start-Sleep -Milliseconds 500
 }
 
