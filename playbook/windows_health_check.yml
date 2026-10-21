@@ -121,13 +121,12 @@
     #####################################################
     # CPU Utilization Check
     #####################################################
-
     - name: Get CPU utilization
       ansible.windows.win_shell: |
-        [math]::Round(
-          (Get-Counter '\Processor(_Total)\% Processor Time').CounterSamples.CookedValue,
-          0
-        )
+        $sample1 = (Get-Counter '\Processor(_Total)\% Processor Time').CounterSamples.CookedValue
+         Start-Sleep 2
+        $sample2 = (Get-Counter '\Processor(_Total)\% Processor Time').CounterSamples.CookedValue
+        [math]::Round(($sample1 + $sample2) / 2,0)
       register: cpu_usage_raw
 
     - name: Set CPU usage fact
