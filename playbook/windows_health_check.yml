@@ -36,12 +36,12 @@
               if ($result) {
                   Write-Output "OPEN"
                }
-              else {
-            Write-Output "CLOSED"
+               else {
+                  Write-Output "CLOSED"
                }
          }
-        catch {
-           Write-Output "CLOSED"
+         catch {
+             Write-Output "CLOSED"
         }
       loop: "{{ services | default([]) }}"
       when:
