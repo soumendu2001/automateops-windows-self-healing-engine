@@ -1,21 +1,13 @@
 ---
-- name: Windows Memory Remediation
+- name: Windows Memory Cleanup
   hosts: "{{ target_host }}"
   gather_facts: false
 
-  vars:
-    memory_threshold: "{{ desired_memory_usage | default(50) }}"
-    process_memory_threshold_mb: 100
-
   tasks:
-    - name: Export memory results
-      set_stats:
-        data:
-           memory_usage_after: "{{ memory_usage_after }}"
 
-    #####################################################
+    ############################################################
     # PRE-CHECK
-    #####################################################
+    ############################################################
 
     - name: Get current memory utilization
       ansible.windows.win_shell: |
@@ -29,18 +21,84 @@
         [math]::Round($used,0)
       register: memory_before
 
-    - set_fact:
-        current_memory: "{{ memory_before.stdout | trim | float }}"
+    - name: Set memory fact
+      set_fact:
+        current_memory_usage: "{{ memory_before.stdout | trim | int }}"
 
-    - debug:
-        msg: "Current Memory Usage: {{ current_memory }}%"
+    - name: Display memory utilization
+      debug:
+        msg: "Current Memory Usage: {{ current_memory_usage }}%"
 
-    - meta: end_play
+    - name: Export healthy memory status
+      set_stats:
+        aggregate: true
+        data:
+          memory_usage_after: "{{ current_memory_usage }}"
       when:
-        - (current_memory | float) <= (memory_threshold | float)
+        - current_memory_usage | int < desired_memory_usage | int
 
-    #####################################################
-    # MAIN REMEDIATION ENGINE
-    #####################################################
+    - name: Exit if memory healthy
+      meta: end_play
+      when:
+        - current_memory_usage | int < desired_memory_usage | int
 
-    - include_tasks: memory_remediate.yml
+    ############################################################
+    # REMEDIATION
+    ############################################################
+
+    - name: Force garbage collection
+      ansible.windows.win_shell: |
+        [System.GC]::Collect()
+
+    - name: Remove Temp Files
+      ansible.windows.win_shell: |
+        Remove-Item "C:\Windows\Temp\*" `
+          -Recurse `
+          -Force `
+          -ErrorAction SilentlyContinue
+
+    - name: Stop memory pressure process if present
+      ansible.windows.win_shell: |
+        Get-Process powershell -ErrorAction SilentlyContinue |
+        Where-Object {$_.WorkingSet -gt 500MB} |
+        Stop-Process -Force -ErrorAction SilentlyContinue
+
+    ############################################################
+    # VALIDATION
+    ############################################################
+
+    - name: Wait for stabilization
+      pause:
+        seconds: 10
+
+    - name: Get memory utilization after cleanup
+      ansible.windows.win_shell: |
+        $os = Get-CimInstance Win32_OperatingSystem
+
+        $used =
+        (($os.TotalVisibleMemorySize -
+          $os.FreePhysicalMemory) /
+          $os.TotalVisibleMemorySize) * 100
+
+        [math]::Round($used,0)
+      register: memory_after
+
+    - name: Set memory usage after fact
+      set_fact:
+        memory_usage_after: "{{ memory_after.stdout | trim | int }}"
+
+    - name: Display memory results
+      debug:
+        msg:
+          - "Memory Before : {{ current_memory_usage }}%"
+          - "Memory After  : {{ memory_usage_after }}%"
+
+    ############################################################
+    # EXPORT RESULTS
+    ############################################################
+
+    - name: Export memory results
+      set_stats:
+        aggregate: true
+        data:
+          memory_usage_after: "{{ memory_usage_after }}"
