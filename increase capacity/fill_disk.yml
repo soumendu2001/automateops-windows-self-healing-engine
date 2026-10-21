@@ -1,0 +1,118 @@
+---
+- name: Safely Fill Disk for Training Lab
+  hosts: "{{ target_host }}"
+  gather_facts: false
+
+  vars:
+    safety_free_gb: 1
+    target_disk_usage: "{{ desired_disk_usage | default(95) }}"
+    max_current_usage_allowed: 80
+    target_drive_letter: "{{ drive_letter | default('C') }}"
+
+  tasks:
+
+    - name: Create lab directory
+      ansible.windows.win_file:
+        path: C:\DiskFill
+        state: directory
+
+    - name: Collect disk information
+      ansible.windows.win_powershell:
+        script: |
+          $disk = Get-CimInstance Win32_LogicalDisk |
+          Where-Object {$_.DeviceID -eq "{{ target_drive_letter }}:"}
+
+          @{
+            size_gb = [math]::Round($disk.Size / 1GB,2)
+            free_gb = [math]::Round($disk.FreeSpace / 1GB,2)
+            used_pct = [math]::Round((($disk.Size - $disk.FreeSpace) / $disk.Size) * 100,2)
+          }
+      register: disk_result
+
+    - name: Show disk information
+      debug:
+        var: disk_result
+
+    - name: Store disk facts
+      set_fact:
+        disk: "{{ disk_result.output[0] }}"
+
+    - name: Display current disk status
+      debug:
+        msg:
+          - "Drive: {{ target_drive_letter }}:"
+          - "Size: {{ disk.size_gb }} GB"
+          - "Free: {{ disk.free_gb }} GB"
+          - "Used: {{ disk.used_pct }}%"
+
+    - name: Prevent execution on heavily utilized disks
+      fail:
+        msg: >
+          Current disk utilization is {{ disk.used_pct }}%.
+          Fill Disk is allowed only when utilization is below {{ max_current_usage_allowed }}%.
+      when:
+        - disk.used_pct | float >= max_current_usage_allowed | float
+
+    - name: Calculate filler size
+      set_fact:
+        required_gb: >-
+          {{
+            (
+              (
+                (disk.size_gb | float * target_disk_usage | float / 100)
+                -
+                (disk.size_gb | float * disk.used_pct | float / 100)
+              )
+            ) | round(0, 'ceil')
+          }}
+
+    - name: Display calculated filler size
+      debug:
+        msg: "Need to create {{ required_gb }} GB"
+
+    - name: Fail if disk already exceeds target
+      fail:
+        msg: >
+          Current utilization is {{ disk.used_pct }}%.
+          Desired utilization is {{ target_disk_usage }}%.
+      when:
+        - disk.used_pct | float >= target_disk_usage | float
+
+    - name: Calculate maximum safe allocation
+      set_fact:
+        max_safe_gb: "{{ (disk.free_gb | float) - (safety_free_gb | float) }}"
+
+    - name: Verify sufficient free space exists
+      fail:
+        msg: >
+          Unable to reach {{ target_disk_usage }}%.
+          Required: {{ required_gb }} GB.
+          Safely available: {{ max_safe_gb }} GB.
+      when:
+        - required_gb | float > max_safe_gb | float
+
+    - name: Remove previous filler file
+      ansible.windows.win_file:
+        path: C:\DiskFill\diskfill.dat
+        state: absent
+
+    - name: Create filler file
+      ansible.windows.win_powershell:
+        script: |
+          $SizeBytes = {{ required_gb }} * 1GB
+          fsutil file createnew "C:\DiskFill\diskfill.dat" $SizeBytes
+
+    - name: Recalculate disk utilization
+      ansible.windows.win_powershell:
+        script: |
+          $disk = Get-CimInstance Win32_LogicalDisk |
+          Where-Object {$_.DeviceID -eq "{{ target_drive_letter }}:"}
+
+          [math]::Round((($disk.Size - $disk.FreeSpace) / $disk.Size) * 100,2)
+      register: final_usage
+
+    - name: Show final utilization
+      debug:
+        msg:
+          - "Target utilization: {{ target_disk_usage }}%"
+          - "Actual utilization: {{ final_usage.output[0] }}%"
