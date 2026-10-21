@@ -152,3 +152,19 @@
           - "Disk Remediation    : {{ run_disk_fix }}"
           - "Service Remediation : {{ run_service_fix }}"
           - "=========================================="
+          #####################################################
+    # Export Variables To Workflow
+    #####################################################
+
+    - name: Export workflow variables
+      ansible.builtin.set_stats:
+        data:
+          run_service_fix: "{{ run_service_fix }}"
+          run_disk_fix: "{{ run_disk_fix }}"
+          run_memory_fix: "{{ run_memory_fix }}"
+          run_cpu_fix: "{{ run_cpu_fix }}"
+          failed_services: "{{ failed_services }}"
+          disk_usage_before: "{{ disk_usage }}"
+          memory_usage_before: "{{ memory_usage }}"
+          cpu_usage_before: "{{ cpu_usage }}"
+  
