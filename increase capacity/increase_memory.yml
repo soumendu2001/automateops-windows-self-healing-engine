@@ -1,1 +1,9 @@
+---
+- hosts: "{{ target_host }}"
+  gather_facts: false
 
+  tasks:
+    - name: Start memory pressure
+      ansible.windows.win_shell: |
+        Start-Process powershell.exe `
+        -ArgumentList "-ExecutionPolicy Bypass -File increase_memory.ps1"
