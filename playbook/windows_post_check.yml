@@ -50,7 +50,7 @@
 
     - set_fact:
         disk_usage_after: "{{ disk_after.stdout | trim | int }}"
-        disk_healthy: "{{ (disk_after.stdout | trim | int) < (disk_threshold | int) }}"
+        disk_healthy: "{{ (disk_after.stdout | trim | int) <= (disk_threshold | int) }}"
 
     #################################################
     # Memory Validation
@@ -70,7 +70,7 @@
 
     - set_fact:
         memory_usage_after: "{{ memory_after.stdout | trim | int }}"
-        memory_healthy: "{{ (memory_after.stdout | trim | int) < (memory_threshold | int) }}"
+        memory_healthy: "{{ (memory_after.stdout | trim | int) <= (memory_threshold | int) }}"
 
     #################################################
     # CPU Validation
@@ -88,7 +88,7 @@
 
     - set_fact:
         cpu_usage_after: "{{ cpu_after.stdout | trim | int }}"
-        cpu_healthy: "{{ (cpu_after.stdout | trim | int) < (cpu_threshold | int) }}"
+        cpu_healthy: "{{ (cpu_after.stdout | trim | int) <= (cpu_threshold | int) }}"
 
     #################################################
     # Overall Result
@@ -98,10 +98,13 @@
       set_fact:
         self_healing_success: >-
           {{
-            service_healthy
-            and disk_healthy
-            and memory_healthy
-            and cpu_healthy
+            (service_healthy | bool) 
+            and 
+            (disk_healthy | bool)
+            and 
+            (memory_healthy | bool)
+            and 
+            (cpu_healthy | bool)
           }}
 
     - name: Validation Summary
