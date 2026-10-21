@@ -50,7 +50,22 @@
 
         [math]::Round(($disk.FreeSpace / 1GB),2)
       register: free_before
-
+    # #################################################################
+     # Clear Temp Directory
+    - name: Clear directories
+      ansible.windows.win_shell: |
+        if (Test-Path "{{ item }}") {
+            Remove-Item "{{ item }}\*" `
+            -Recurse `
+            -Force `
+            -ErrorAction SilentlyContinue
+        }
+      loop:
+        - C:\Temp
+        - C:\DiskFill
+        - C:\inetpub\logs
+      ignore_errors: true
+    # ################################################################
     - name: Delete Windows Temp Files
       ansible.windows.win_shell: |
         Remove-Item -Path "C:\Windows\Temp\*" `
