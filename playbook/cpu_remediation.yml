@@ -7,6 +7,10 @@
     cpu_threshold: "{{ desired_cpu_usage | default(85) }}"
 
   tasks:
+    - name: Skip CPU remediation if not required
+      meta: end_play
+      when:
+        - not (run_cpu_fix | default(false))
 
     ############################################################
     # PRE-CHECK
