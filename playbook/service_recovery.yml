@@ -4,10 +4,6 @@
   gather_facts: false
 
   tasks:
-    - name: Export service results
-      set_stats:
-        data:
-          service_healthy: true
 
     ############################################################
     # PRE-CHECK
@@ -28,19 +24,30 @@
     - name: Display service status
       debug:
         msg: "{{ item.item.name }} : {{ item.stdout | trim }}"
-      loop: "{{ service_checks.results }}"
+      loop: "{{ service_checks.results | default([]) }}"
+      when:
+        - item.stdout is defined
 
     - name: Build failed services list
       set_fact:
         failed_services: "{{ failed_services + [ item.item.name ] }}"
-      loop: "{{ service_checks.results }}"
+      loop: "{{ service_checks.results | default([]) }}"
       when:
         - item.stdout is defined
         - item.stdout | trim != "Running"
 
+    - name: Export healthy service status
+      set_stats:
+        aggregate: true
+        data:
+          service_healthy: true
+      when:
+        - failed_services | length == 0
+
     - name: Exit if all services healthy
       meta: end_play
-      when: failed_services | length == 0
+      when:
+        - failed_services | length == 0
 
     ############################################################
     # REMEDIATION
@@ -50,7 +57,7 @@
       debug:
         msg:
           - "Failed Services: {{ failed_services }}"
-          - "Initiating recovery..."
+          - "Initiating recovery"
 
     - name: Start failed services
       ansible.windows.win_service:
@@ -63,13 +70,35 @@
     # VALIDATION
     ############################################################
 
-    - name: Recheck service status
+    - name: Validate recovered services
       ansible.windows.win_shell: |
         (Get-Service -Name "{{ item }}").Status
       loop: "{{ failed_services }}"
       register: validation_results
 
-    - name: Display recovery results
+    - name: Show validation results
       debug:
         msg: "{{ item.item }} : {{ item.stdout | trim }}"
       loop: "{{ validation_results.results }}"
+
+    - name: Determine service health
+      set_fact:
+        service_healthy: >-
+          {{
+            validation_results.results
+            | map(attribute='stdout')
+            | map('trim')
+            | unique
+            | list
+            == ['Running']
+          }}
+
+    ############################################################
+    # EXPORT RESULTS
+    ############################################################
+
+    - name: Export service results
+      set_stats:
+        aggregate: true
+        data:
+          service_healthy: "{{ service_healthy }}"
