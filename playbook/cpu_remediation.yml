@@ -38,7 +38,7 @@
         data:
           cpu_usage_after: "{{ current_cpu_usage }}"
       when:
-        - current_cpu_usage | int < desired_cpu_usage | int
+        - (current_cpu_usage | int) < (desired_cpu_usage | int)
 
     - name: Exit if CPU healthy
       meta: end_play
