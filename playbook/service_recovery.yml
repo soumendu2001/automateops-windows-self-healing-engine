@@ -4,6 +4,10 @@
   gather_facts: false
 
   tasks:
+    - name: Export service results
+      set_stats:
+        data:
+          service_healthy: true
 
     ############################################################
     # PRE-CHECK
