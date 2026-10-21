@@ -35,49 +35,57 @@
           }}
 
     ############################################################
-    # DISPLAY REPORT LINE-BY-LINE
+    # DISPLAY REPORT
     ############################################################
 
-    - name: Display Self-Healing Report
-      debug:
-        msg: "{{ item }}"
-      loop:
-        - ""
-        - "======================================================"
-        - " WINDOWS AUTONOMOUS SELF-HEALING REPORT"
-        - "======================================================"
-        - ""
-        - "SERVER"
-        - "------------------------------------------------------"
-        - "{{ target_host | default('Unknown') }}"
-        - ""
-        - "ISSUES DETECTED"
-        - "------------------------------------------------------"
-        - "Service Recovery Required : {{ run_service_fix | default(false) }}"
-        - "Disk Cleanup Required     : {{ run_disk_fix | default(false) }}"
-        - "Memory Cleanup Required   : {{ run_memory_fix | default(false) }}"
-        - "CPU Cleanup Required      : {{ run_cpu_fix | default(false) }}"
-        - ""
-        - "POST-REMEDIATION STATE"
-        - "------------------------------------------------------"
-        - "Service Healthy : {{ service_healthy | default('Unknown') }}"
-        - "Disk Usage      : {{ disk_usage_after | default(disk_usage_before | default('N/A')) }}%"
-        - "Memory Usage    : {{ memory_usage_after | default(memory_usage_before | default('N/A')) }}%"
-        - "CPU Usage       : {{ cpu_usage_after | default(cpu_usage_before | default('N/A')) }}%"
-        - ""
-        - "TARGET THRESHOLDS"
-        - "------------------------------------------------------"
-        - "Disk Threshold   : {{ desired_disk_usage | default(90) }}%"
-        - "Memory Threshold : {{ desired_memory_usage | default(90) }}%"
-        - "CPU Threshold    : {{ desired_cpu_usage | default(85) }}%"
-        - ""
-        - "AUTOMATION SUMMARY"
-        - "------------------------------------------------------"
-        - "Human Intervention : 0"
-        - "Autonomous Recovery: ENABLED"
-        - ""
-        - "FINAL RESULT"
-        - "------------------------------------------------------"
-        - "{{ 'SUCCESS' if self_healing_success else 'FAILED' }}"
-        - ""
-        - "======================================================"
+    - name: Create report file
+      copy:
+        dest: /tmp/self_healing_report.txt
+        content: |
+        ======================================================
+           WINDOWS AUTONOMOUS SELF-HEALING REPORT
+        ======================================================
+
+        SERVER
+       ------------------------------------------------------
+       {{ target_host }}
+
+       ISSUES DETECTED
+       ------------------------------------------------------
+       Service Recovery Required : {{ run_service_fix }}
+       Disk Cleanup Required     : {{ run_disk_fix }}
+       Memory Cleanup Required   : {{ run_memory_fix }}
+       CPU Cleanup Required      : {{ run_cpu_fix }}
+
+       POST-REMEDIATION STATE
+       ------------------------------------------------------
+       Service Healthy : {{ service_healthy }}
+       Disk Usage      : {{ disk_usage_after }}%
+       Memory Usage    : {{ memory_usage_after }}%
+       CPU Usage       : {{ cpu_usage_after }}%
+
+       TARGET THRESHOLDS
+       ------------------------------------------------------
+       Disk Threshold   : {{ desired_disk_usage }}%
+       Memory Threshold : {{ desired_memory_usage }}%
+       CPU Threshold    : {{ desired_cpu_usage }}%
+
+       AUTOMATION SUMMARY
+       ------------------------------------------------------
+       Human Intervention : 0
+       Autonomous Recovery: ENABLED
+
+       FINAL RESULT
+      ------------------------------------------------------
+      {{ 'SUCCESS' if self_healing_success else 'FAILED' }}
+
+      ======================================================
+
+- name: Display report
+  command: cat /tmp/self_healing_report.txt
+  register: report_output
+  changed_when: false
+
+- name: Show final report
+  debug:
+    var: report_output.stdout
