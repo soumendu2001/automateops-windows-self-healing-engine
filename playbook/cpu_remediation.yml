@@ -3,6 +3,9 @@
   hosts: "{{ target_host }}"
   gather_facts: false
 
+  vars:
+    cpu_threshold: "{{ desired_cpu_usage | default(85) }}"
+
   tasks:
 
     ############################################################
@@ -11,17 +14,15 @@
 
     - name: Get CPU utilization
       ansible.windows.win_shell: |
-        $sample1 = (
-          Get-Counter '\Processor(_Total)\% Processor Time'
-        ).CounterSamples.CookedValue
+        try {
+          $cpu = Get-CimInstance Win32_Processor |
+            Measure-Object -Property LoadPercentage -Average
 
-        Start-Sleep -Seconds 2
-
-        $sample2 = (
-          Get-Counter '\Processor(_Total)\% Processor Time'
-        ).CounterSamples.CookedValue
-
-        [math]::Round(($sample1 + $sample2) / 2,0)
+          [math]::Round($cpu.Average,0)
+        }
+        catch {
+          Write-Output "0"
+        }
       register: cpu_before
 
     - name: Set CPU fact
@@ -32,54 +33,59 @@
       debug:
         msg: "Current CPU Usage: {{ current_cpu_usage }}%"
 
+    ############################################################
+    # HEALTHY CPU PATH
+    ############################################################
+
     - name: Export healthy CPU status
       set_stats:
         aggregate: true
         data:
           cpu_usage_after: "{{ current_cpu_usage }}"
       when:
-        - (current_cpu_usage | int) < (desired_cpu_usage | int)
+        - current_cpu_usage | int < cpu_threshold | int
 
     - name: Exit if CPU healthy
       meta: end_play
       when:
-        - current_cpu_usage | int < desired_cpu_usage | int
+        - current_cpu_usage | int < cpu_threshold | int
 
     ############################################################
     # REMEDIATION
     ############################################################
 
+    - name: Remediation required
+      debug:
+        msg:
+          - "CPU threshold exceeded"
+          - "Starting CPU remediation"
+
     - name: Stop high CPU powershell processes
       ansible.windows.win_shell: |
         Get-Process powershell -ErrorAction SilentlyContinue |
+        Where-Object { $_.Id -ne $PID } |
         Stop-Process -Force -ErrorAction SilentlyContinue
-
-    - name: Restart WMI service
-      ansible.windows.win_service:
-        name: Winmgmt
-        state: restarted
-
-    ############################################################
-    # VALIDATION
-    ############################################################
+      ignore_errors: true
 
     - name: Wait for stabilization
       pause:
         seconds: 15
 
+    ############################################################
+    # VALIDATION
+    ############################################################
+
     - name: Recheck CPU utilization
       ansible.windows.win_shell: |
-        $sample1 = (
-          Get-Counter '\Processor(_Total)\% Processor Time'
-        ).CounterSamples.CookedValue
+        try {
+          $cpu = Get-CimInstance Win32_Processor |
+            Measure-Object -Property LoadPercentage -Average
 
-        Start-Sleep -Seconds 2
-
-        $sample2 = (
-          Get-Counter '\Processor(_Total)\% Processor Time'
-        ).CounterSamples.CookedValue
-
-        [math]::Round(($sample1 + $sample2) / 2,0)
+          [math]::Round($cpu.Average,0)
+        }
+        catch {
+          Write-Output "0"
+        }
       register: cpu_after
 
     - name: Set CPU usage after fact
