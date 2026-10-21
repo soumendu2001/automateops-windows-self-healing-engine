@@ -25,6 +25,29 @@
         - item.validation_type == "service"
       register: service_checks
 
+    - name: Validate ports
+      ansible.windows.win_shell: |
+         try {
+              $result = Test-NetConnection `
+                  -ComputerName localhost `
+                  -Port {{ item.validation_port }} `
+                  -InformationLevel Quiet
+
+              if ($result) {
+                  Write-Output "OPEN"
+               }
+              else {
+            Write-Output "CLOSED"
+               }
+         }
+        catch {
+           Write-Output "CLOSED"
+        }
+      loop: "{{ services | default([]) }}"
+      when:
+        - item.validation_type == "port"
+      register: port_checks
+
     - name: Show service status
       debug:
         msg: "{{ item.item.name }} : {{ item.stdout }}"
@@ -36,6 +59,13 @@
       when:
         - item.stdout | trim != "Running"
       loop: "{{ service_checks.results }}"
+
+    - name: Add failed port validations
+      set_fact:
+        failed_services: "{{ failed_services + [ item.item.name ] }}"
+      when:
+        - item.stdout | trim != "OPEN"
+      loop: "{{ port_checks.results }}"
 
     - name: Set service remediation flag
       set_fact:
