@@ -9,8 +9,9 @@
     cpu_threshold: "{{ desired_cpu_usage | default(85) }}"
 
   tasks:
+
     #####################################################
-    # Service Validation
+    # SERVICE VALIDATION
     #####################################################
 
     - name: Initialize failed services
@@ -20,29 +21,29 @@
     - name: Check service status
       ansible.windows.win_shell: |
         (Get-Service -Name "{{ item.name }}").Status
-      loop: "{{ services | default([])}}"
+      loop: "{{ services | default([]) }}"
       when:
         - item.validation_type == "service"
       register: service_checks
 
     - name: Validate ports
       ansible.windows.win_shell: |
-         try {
-              $result = Test-NetConnection `
-                  -ComputerName localhost `
-                  -Port {{ item.validation_port }} `
-                  -InformationLevel Quiet
+        try {
+            $result = Test-NetConnection `
+                -ComputerName localhost `
+                -Port {{ item.validation_port }} `
+                -InformationLevel Quiet
 
-              if ($result) {
-                  Write-Output "OPEN"
-               }
-               else {
-                  Write-Output "CLOSED"
-               }
-         }
-         catch {
-             Write-Output "CLOSED"
-          }
+            if ($result) {
+                Write-Output "OPEN"
+            }
+            else {
+                Write-Output "CLOSED"
+            }
+        }
+        catch {
+            Write-Output "CLOSED"
+        }
       loop: "{{ services | default([]) }}"
       when:
         - item.validation_type == "port"
@@ -50,25 +51,33 @@
 
     - name: Show service status
       debug:
-        msg: "{{ item.item.name }} : {{ item.stdout }}"
-      loop: "{{ service_checks.results }}"
-      when: 
+        msg: "{{ item.item.name }} : {{ item.stdout | trim }}"
+      loop: "{{ service_checks.results | default([]) }}"
+      when:
         - item.stdout is defined
 
     - name: Build failed services list
       set_fact:
         failed_services: "{{ failed_services + [ item.item.name ] }}"
+      loop: "{{ service_checks.results | default([]) }}"
       when:
-        - item.stdout | trim != "Running"
         - item.stdout is defined
-      loop: "{{ service_checks.results }}"
+        - item.stdout | trim != "Running"
+
+    - name: Add failed port validations
+      set_fact:
+        failed_services: "{{ failed_services + [ item.item.name ] }}"
+      loop: "{{ port_checks.results | default([]) }}"
+      when:
+        - item.stdout is defined
+        - item.stdout | trim != "OPEN"
 
     - name: Set service remediation flag
       set_fact:
         run_service_fix: "{{ failed_services | length > 0 }}"
 
-    # #####################################################
-    # Disk Utilization Check
+    #####################################################
+    # DISK UTILIZATION CHECK
     #####################################################
 
     - name: Get disk utilization
@@ -88,10 +97,10 @@
 
     - name: Set disk remediation flag
       set_fact:
-        run_disk_fix: "{{ (disk_usage | int) >= (disk_threshold | int) }}"
+        run_disk_fix: "{{ disk_usage | int >= disk_threshold | int }}"
 
     #####################################################
-    # Memory Utilization Check
+    # MEMORY UTILIZATION CHECK
     #####################################################
 
     - name: Get memory utilization
@@ -112,17 +121,25 @@
 
     - name: Set memory remediation flag
       set_fact:
-        run_memory_fix: "{{ (memory_usage | int) >= (memory_threshold | int) }}"
+        run_memory_fix: "{{ memory_usage | int >= memory_threshold | int }}"
 
     #####################################################
-    # CPU Utilization Check
+    # CPU UTILIZATION CHECK
     #####################################################
+
     - name: Get CPU utilization
       ansible.windows.win_shell: |
-        $sample1 = (Get-Counter '\Processor(_Total)\% Processor Time').CounterSamples.CookedValue
-         Start-Sleep 2
-        $sample2 = (Get-Counter '\Processor(_Total)\% Processor Time').CounterSamples.CookedValue
-        [math]::Round(($sample1 + $sample2) / 2,0)
+        $sample1 = (
+          Get-Counter '\Processor(_Total)\% Processor Time'
+        ).CounterSamples.CookedValue
+
+        Start-Sleep -Seconds 2
+
+        $sample2 = (
+          Get-Counter '\Processor(_Total)\% Processor Time'
+        ).CounterSamples.CookedValue
+
+        [math]::Round(($sample1 + $sample2) / 2, 0)
       register: cpu_usage_raw
 
     - name: Set CPU usage fact
@@ -131,10 +148,10 @@
 
     - name: Set CPU remediation flag
       set_fact:
-        run_cpu_fix: "{{ (cpu_usage | int) >= (cpu_threshold | int) }}"
+        run_cpu_fix: "{{ cpu_usage | int >= cpu_threshold | int }}"
 
     #####################################################
-    # Health Summary
+    # HEALTH SUMMARY
     #####################################################
 
     - name: Display health assessment
@@ -152,19 +169,22 @@
           - "Disk Remediation    : {{ run_disk_fix }}"
           - "Service Remediation : {{ run_service_fix }}"
           - "=========================================="
-          #####################################################
-    # Export Variables To Workflow
+
+    #####################################################
+    # EXPORT VARIABLES TO AWX WORKFLOW
     #####################################################
 
     - name: Export workflow variables
       ansible.builtin.set_stats:
+        aggregate: true
         data:
           run_service_fix: "{{ run_service_fix }}"
           run_disk_fix: "{{ run_disk_fix }}"
           run_memory_fix: "{{ run_memory_fix }}"
           run_cpu_fix: "{{ run_cpu_fix }}"
+
           failed_services: "{{ failed_services }}"
+
           disk_usage_before: "{{ disk_usage }}"
           memory_usage_before: "{{ memory_usage }}"
           cpu_usage_before: "{{ cpu_usage }}"
-  
