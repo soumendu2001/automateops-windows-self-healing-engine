@@ -42,7 +42,7 @@
          }
          catch {
              Write-Output "CLOSED"
-        }
+         }
       loop: "{{ services | default([]) }}"
       when:
         - item.validation_type == "port"
