@@ -115,5 +115,4 @@
           - "Disk Usage      : {{ disk_usage_after }}%"
           - "Memory Usage    : {{ memory_usage_after }}%"
           - "CPU Usage       : {{ cpu_usage_after }}%"
-          - "Overall Status  : {{ self_healing_success }}"
           - "====================================="
